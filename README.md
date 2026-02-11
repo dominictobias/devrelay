@@ -1,0 +1,105 @@
+# DevRelay
+
+A local development reverse proxy with automatic HTTPS using Cloudflare Pingora.
+
+## Features
+
+- 🔀 Route custom domains to local development servers
+- 🔒 Automatic HTTPS with self-signed certificates
+- ⚡ Built on Cloudflare's high-performance Pingora framework
+- 🎯 Flexible port mapping (proxy port doesn't need to match backend port)
+- 📝 Simple YAML configuration
+
+## Quick Start
+
+### 1. Configure Your Routes
+
+Create a `config.yaml` file (or copy from `config.example.yaml`):
+
+```yaml
+routes:
+  - host: "myapp.dev"
+    port: 443 # HTTPS port
+    backend: "localhost"
+    backend_port: 3000 # Port where your dev server runs
+
+  - host: "api.dev"
+    port: 443
+    backend: "localhost"
+    backend_port: 5000
+
+tls:
+  enabled: true
+  cert_dir: "./certs"
+  ca_name: "DevRelay CA"
+```
+
+### 2. Build and Run
+
+```bash
+cargo build --release
+./target/release/devrelay
+```
+
+That's it! 🎉
+
+On first run, DevRelay will **automatically**:
+
+- ✅ Generate CA and server certificates
+- ✅ Install the CA certificate to your macOS System Keychain (prompts for password)
+- ✅ Add your custom domains to `/etc/hosts` (prompts for password)
+
+Then just restart your browser and access `https://myapp.dev`!
+
+## Usage
+
+### Access Your Dev Servers
+
+- `http://myapp.dev:8080` → proxies to `localhost:3000`
+- `https://api.dev` → proxies to `localhost:5000`
+
+### Custom Config Path
+
+```bash
+./target/release/devrelay --config config.example.yaml
+```
+
+### Skip Auto-Installation
+
+If you want to install manually:
+
+```bash
+./target/release/devrelay --skip-install
+```
+
+### Force Reinstallation
+
+To force reinstall the CA cert and hosts entries:
+
+```bash
+./target/release/devrelay --force-install
+```
+
+### Uninstall
+
+To remove the CA certificate from your macOS Keychain and clean up `/etc/hosts` entries:
+
+```bash
+./target/release/devrelay --uninstall
+```
+
+## How It Works
+
+1. **Routing**: Reads the `Host` header from incoming requests and matches it against configured routes
+2. **Port Mapping**: Each route specifies both the listening port and backend port independently
+3. **TLS**: Generates a local CA certificate and signs server certificates for each configured domain
+4. **Proxy**: Uses Pingora's high-performance reverse proxy to forward requests to your local dev servers
+
+## Requirements
+
+- Rust 1.70+
+- macOS (for certificate installation commands; Linux support coming soon)
+
+## License
+
+MIT

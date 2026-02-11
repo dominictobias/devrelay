@@ -1,0 +1,29 @@
+# DevRelay Configuration
+# Routes traffic from custom domains to local development servers
+
+# Proxy routes - each route maps a custom domain to a backend
+routes:
+  - host: "myapp.dev"
+    port: 8080 # Port where proxy listens
+    listen_tls: true # Required for .dev domains in Chrome
+    backend: "localhost"
+    backend_port: 3000 # Port where your dev server runs
+
+  - host: "api.dev"
+    port: 443 # HTTPS on standard port
+    listen_tls: true # Accept HTTPS connections (default: false)
+    backend: "localhost"
+    backend_port: 5000
+
+  - host: "frontend.dev"
+    port: 443
+    listen_tls: true # Accept HTTPS connections (default: false)
+    backend: "localhost"
+    backend_port: 8080
+    backend_tls: false # Connect to backend over TLS (default: false)
+
+# TLS/SSL Configuration
+tls:
+  enabled: true
+  cert_dir: "./certs" # Directory to store generated certificates
+  ca_name: "DevRelay CA" # Name for the Certificate Authority
