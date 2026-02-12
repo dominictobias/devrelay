@@ -6,8 +6,7 @@ A local development reverse proxy with automatic HTTPS using Cloudflare Pingora.
 
 - 🔀 Route custom domains to local development servers
 - 🔒 Automatic HTTPS with self-signed certificates
-- ⚡ Built on Cloudflare's high-performance Pingora framework
-- 🎯 Flexible port mapping (proxy port doesn't need to match backend port)
+- ⚡ Built on Cloudflare's high-performance [Pingora](https://github.com/cloudflare/pingora) framework
 - 📝 Simple YAML configuration
 
 ## Quick Start
