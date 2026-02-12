@@ -6,11 +6,12 @@ use std::sync::Arc;
 
 pub struct DevRelayProxy {
     config: Arc<Config>,
+    quiet: bool,
 }
 
 impl DevRelayProxy {
-    pub fn new(config: Arc<Config>) -> Self {
-        Self { config }
+    pub fn new(config: Arc<Config>, quiet: bool) -> Self {
+        Self { config, quiet }
     }
 
     fn get_backend_for_host(&self, host: &str) -> Option<&Route> {
@@ -38,14 +39,12 @@ impl ProxyHttp for DevRelayProxy {
             .unwrap_or("");
 
         // Find the matching route
-        let route = self
-            .get_backend_for_host(host)
-            .ok_or_else(|| {
-                pingora_core::Error::explain(
-                    pingora_core::ErrorType::HTTPStatus(404),
-                    format!("No route configured for host: {}", host),
-                )
-            })?;
+        let route = self.get_backend_for_host(host).ok_or_else(|| {
+            pingora_core::Error::explain(
+                pingora_core::ErrorType::HTTPStatus(404),
+                format!("No route configured for host: {}", host),
+            )
+        })?;
 
         // Create peer for the backend
         let peer = Box::new(HttpPeer::new(
@@ -54,11 +53,13 @@ impl ProxyHttp for DevRelayProxy {
             route.backend.clone(),
         ));
 
-        let path = session.req_header().uri.path();
-        println!(
-            "Proxying {}{} -> {}:{}",
-            host, path, route.backend, route.backend_port
-        );
+        if !self.quiet {
+            let path = session.req_header().uri.path();
+            println!(
+                "Proxying {}{} -> {}:{}",
+                host, path, route.backend, route.backend_port
+            );
+        }
 
         Ok(peer)
     }

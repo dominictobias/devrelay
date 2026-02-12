@@ -25,7 +25,7 @@ npx @devrelay/cli
 
 ```bash
 cargo build --release
-./target/release/devrelay
+./target/release/devrelay start
 ```
 
 ### 1. Configure Your Routes
@@ -65,10 +65,10 @@ tls:
 If you installed via npm, run:
 
 ```bash
-devrelay
+devrelay start
 ```
 
-If you built from source, run `./target/release/devrelay`.
+If you built from source, run `./target/release/devrelay start`.
 
 That's it! 🎉
 
@@ -91,7 +91,7 @@ Then just restart your browser and access `https://myapp.dev`!
 ### Custom Config Path
 
 ```bash
-devrelay --config config.example.yaml
+devrelay start --config config.example.yaml
 ```
 
 ### Skip Auto-Installation
@@ -99,7 +99,7 @@ devrelay --config config.example.yaml
 If you want to install manually:
 
 ```bash
-devrelay --skip-install
+devrelay start --skip-install
 ```
 
 ### Force Reinstallation
@@ -107,7 +107,15 @@ devrelay --skip-install
 To force reinstall the CA cert and hosts entries:
 
 ```bash
-devrelay --force-install
+devrelay start --force-install
+```
+
+### Quiet Mode
+
+Suppress per-request proxying log lines:
+
+```bash
+devrelay start --quiet
 ```
 
 ### Uninstall
@@ -115,7 +123,7 @@ devrelay --force-install
 To remove the CA certificate from your system trust store and clean up `/etc/hosts` entries:
 
 ```bash
-devrelay --uninstall
+devrelay start --uninstall
 ```
 
 ## How It Works

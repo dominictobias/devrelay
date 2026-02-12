@@ -58,6 +58,7 @@ On first run, DevRelay will automatically generate certificates, install its CA 
 | `devrelay start --config path/to/config.yaml` | Use a custom config file                      |
 | `devrelay start --skip-install`               | Skip CA cert and hosts setup (manual install) |
 | `devrelay start --force-install`              | Reinstall CA cert and hosts entries           |
+| `devrelay start --quiet`                      | Suppress per-request proxying log lines       |
 | `devrelay start --uninstall`                  | Remove CA cert and hosts entries              |
 
 ## Configuration

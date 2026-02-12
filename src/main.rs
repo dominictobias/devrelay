@@ -34,6 +34,10 @@ enum Command {
         /// Uninstall CA certificate and /etc/hosts entries, then exit
         #[arg(long)]
         uninstall: bool,
+
+        /// Suppress per-request "Proxying ... -> ..." log lines
+        #[arg(short, long)]
+        quiet: bool,
     },
 }
 
@@ -46,7 +50,8 @@ fn main() -> Result<()> {
             skip_install,
             force_install,
             uninstall,
-        } => run_server(config, skip_install, force_install, uninstall)?,
+            quiet,
+        } => run_server(config, skip_install, force_install, uninstall, quiet)?,
     }
 
     Ok(())
@@ -57,6 +62,7 @@ fn run_server(
     skip_install: bool,
     force_install: bool,
     uninstall: bool,
+    quiet: bool,
 ) -> Result<()> {
     // Resolve config path - prefer current working directory (project root) for bare filenames
     let config_path = if config_arg.is_absolute() {
@@ -130,7 +136,8 @@ fn run_server(
             let ca_name = &config.tls.ca_name;
             let domains: Vec<String> = config.routes.iter().map(|r| r.host.clone()).collect();
 
-            let needs_install = force_install || !Installer::is_ca_installed(&ca_cert_path, ca_name)?;
+            let needs_install =
+                force_install || !Installer::is_ca_installed(&ca_cert_path, ca_name)?;
 
             if needs_install {
                 Installer::run_install(&ca_cert_path, ca_name, &domains)?;
@@ -173,7 +180,7 @@ fn run_server(
     server.bootstrap();
 
     let config_arc = Arc::new(config);
-    let proxy = DevRelayProxy::new(config_arc.clone());
+    let proxy = DevRelayProxy::new(config_arc.clone(), quiet);
 
     let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
 
