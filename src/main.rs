@@ -127,12 +127,13 @@ fn run_server(
         // Auto-install CA cert and /etc/hosts entries if needed
         if !skip_install {
             let ca_cert_path = cert_manager.ca_cert_path();
+            let ca_name = &config.tls.ca_name;
             let domains: Vec<String> = config.routes.iter().map(|r| r.host.clone()).collect();
 
-            let needs_install = force_install || !Installer::is_ca_installed(&ca_cert_path)?;
+            let needs_install = force_install || !Installer::is_ca_installed(&ca_cert_path, ca_name)?;
 
             if needs_install {
-                Installer::run_install(&ca_cert_path, &domains)?;
+                Installer::run_install(&ca_cert_path, ca_name, &domains)?;
             } else {
                 // Still check hosts entries even if CA is installed
                 println!("✅ CA certificate already installed\n");

@@ -1,4 +1,4 @@
-# Devrelay
+# DevRelay
 
 Blazing fast Rust based reverse proxy powered by Cloudflare's [Pingora](https://github.com/cloudflare/pingora/) with automatic HTTPS for local development.
 

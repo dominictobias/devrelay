@@ -1,10 +1,28 @@
 use anyhow::{Context, Result};
+use sha2::Digest;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 /// CA cert filename we install into the system store on Linux (so we can uninstall reliably).
 const LINUX_CA_FILENAME: &str = "devrelay-ca.crt";
+
+/// SHA-256 fingerprint of the first certificate in a PEM file (or PEM string).
+fn cert_fingerprint_sha256_from_pem(pem: &[u8]) -> Result<Option<[u8; 32]>> {
+    let mut reader = std::io::Cursor::new(pem);
+    for item in std::iter::from_fn(|| rustls_pemfile::read_one(&mut reader).transpose()) {
+        let item = item.context("Failed to parse PEM")?;
+        if let rustls_pemfile::Item::X509Certificate(der) = item {
+            return Ok(Some(sha2::Sha256::digest(&der).into()));
+        }
+    }
+    Ok(None)
+}
+
+fn cert_fingerprint_sha256(path: &Path) -> Result<Option<[u8; 32]>> {
+    let pem = fs::read(path).context("Failed to read CA cert file")?;
+    cert_fingerprint_sha256_from_pem(&pem)
+}
 
 fn run_with_sudo(shell_command: &str) -> Result<String> {
     let output = Command::new("sudo")
@@ -415,58 +433,87 @@ impl Installer {
         Ok(())
     }
 
-    /// Check if CA certificate is installed in system trust store.
-    pub fn is_ca_installed(cert_path: &Path) -> Result<bool> {
+    /// Check if the CA certificate at cert_path is installed in system trust store.
+    /// On macOS we verify by fingerprint so a stale cert with the same name is not considered installed.
+    pub fn is_ca_installed(cert_path: &Path, ca_name: &str) -> Result<bool> {
         if !cert_path.exists() {
             return Ok(false);
         }
+        let our_fp = match cert_fingerprint_sha256(cert_path)? {
+            Some(f) => f,
+            None => return Ok(false),
+        };
         if is_macos() {
-            Self::is_ca_installed_macos()
+            Self::is_ca_installed_macos(ca_name, &our_fp)
         } else if std::env::consts::OS == "linux" {
-            Self::is_ca_installed_linux()
+            Self::is_ca_installed_linux(&our_fp)
         } else {
             Ok(false)
         }
     }
 
-    /// Check if CA certificate is installed in macOS System Keychain.
-    fn is_ca_installed_macos() -> Result<bool> {
+    /// Check if our exact CA certificate (by fingerprint) is in macOS System Keychain.
+    fn is_ca_installed_macos(ca_name: &str, our_fingerprint: &[u8; 32]) -> Result<bool> {
         let output = Command::new("security")
             .arg("find-certificate")
             .arg("-a")
             .arg("-c")
-            .arg("DevRelay CA")
+            .arg(ca_name)
+            .arg("-p")
             .arg("/Library/Keychains/System.keychain")
             .output()
             .context("Failed to check keychain")?;
 
-        Ok(output.status.success() && !output.stdout.is_empty())
+        if !output.status.success() || output.stdout.is_empty() {
+            return Ok(false);
+        }
+
+        // Keychain may return multiple certs with the same name (e.g. old + new). Check if any match.
+        let pem = output.stdout;
+        let mut reader = std::io::Cursor::new(&pem);
+        while let Some(item) = rustls_pemfile::read_one(&mut reader).transpose() {
+            let item = item.context("Failed to parse keychain PEM")?;
+            if let rustls_pemfile::Item::X509Certificate(der) = item {
+                let fp: [u8; 32] = sha2::Sha256::digest(&der).into();
+                if fp == *our_fingerprint {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
 
-    /// Check if our CA certificate is installed in Linux trust store.
-    fn is_ca_installed_linux() -> Result<bool> {
+    /// Check if our exact CA certificate (by fingerprint) is in Linux trust store.
+    fn is_ca_installed_linux(our_fingerprint: &[u8; 32]) -> Result<bool> {
         let anchors = [
             "/usr/local/share/ca-certificates",
             "/etc/pki/ca-trust/source/anchors",
         ];
         for dir in &anchors {
-            if Path::new(&format!("{}/{}", dir, LINUX_CA_FILENAME)).exists() {
-                return Ok(true);
+            let path = format!("{}/{}", dir, LINUX_CA_FILENAME);
+            if Path::new(&path).exists() {
+                if let Some(installed) = cert_fingerprint_sha256(Path::new(&path))? {
+                    return Ok(installed == *our_fingerprint);
+                }
             }
         }
         Ok(false)
     }
 
     /// Run the full installation process
-    pub fn run_install(cert_path: &Path, domains: &[String]) -> Result<()> {
+    pub fn run_install(cert_path: &Path, ca_name: &str, domains: &[String]) -> Result<()> {
         println!("\n╔════════════════════════════════════════╗");
         println!("║     DevRelay Installation Setup       ║");
         println!("╚════════════════════════════════════════╝\n");
 
         let mut success = true;
 
-        // Install CA certificate
-        if !Self::is_ca_installed(cert_path)? {
+        // Install CA certificate (on macOS, replace any existing cert with same name so we don't leave a stale one)
+        if !Self::is_ca_installed(cert_path, ca_name)? {
+            if is_macos() {
+                // Remove any existing "DevRelay CA" (or same ca_name) so the new cert replaces it
+                let _ = Self::uninstall_ca_cert(ca_name)?;
+            }
             if !Self::install_ca_cert(cert_path)? {
                 success = false;
             }
