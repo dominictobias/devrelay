@@ -24,18 +24,17 @@ routes:
     backend: "localhost"
     backend_port: 3000 # Port where your dev server runs
 
-  - host: "api.dev"
-    port: 443 # HTTPS on standard port
-    listen_tls: true # Accept HTTPS connections (default: false)
+  - host: "myapi.com"
+    port: 8080
     backend: "localhost"
     backend_port: 5000
 
-  - host: "frontend.dev"
+  - host: "myfrontend.com"
     port: 443
     listen_tls: true # Accept HTTPS connections (default: false)
     backend: "localhost"
-    backend_port: 8080
-    backend_tls: false # Connect to backend over TLS (default: false)
+    backend_port: 6000
+    backend_tls: true # Connect to backend over HTTPS (default: false)
 
 # TLS/SSL Configuration
 tls:
@@ -66,7 +65,8 @@ Then just restart your browser and access `https://myapp.dev`!
 ### Access Your Dev Servers
 
 - `https://myapp.dev:8080` → proxies to `http://localhost:3000`
-- `https://api.dev` → proxies to `http://localhost:5000`
+- `http://myapi.com` → proxies to `http://localhost:5000`
+- `https://myfrontend.com` → proxies to `https://localhost:6000`
 
 ### Custom Config Path
 
