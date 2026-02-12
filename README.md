@@ -36,7 +36,7 @@ Create a `config.yaml` file (or copy from `config.example.yaml`):
 # Proxy routes - each route maps a custom domain to a backend
 routes:
   - host: "myapp.dev"
-    port: 8080 # Port where proxy listens
+    port: 443 # Port where proxy listens
     listen_tls: true # Required for .dev domains in Chrome
     backend: "localhost"
     backend_port: 3000 # Port where your dev server runs
