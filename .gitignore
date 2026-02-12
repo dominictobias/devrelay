@@ -2,3 +2,8 @@
 /certs
 config.yaml
 .DS_Store
+
+# NPM publish artifacts
+npm/pkg
+upload
+artifacts

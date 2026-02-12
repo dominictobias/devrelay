@@ -1,0 +1,22 @@
+{
+  "name": "@devrelay/cli",
+  "version": "0.1.0",
+  "description": "Local development reverse proxy with automatic HTTPS",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/infensus/devrelay.git"
+  },
+  "bin": {
+    "devrelay": "bin/devrelay.js"
+  },
+  "optionalDependencies": {
+    "@devrelay/darwin-arm64": "0.1.0",
+    "@devrelay/darwin-x64": "0.1.0",
+    "@devrelay/linux-arm64": "0.1.0",
+    "@devrelay/linux-x64": "0.1.0"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

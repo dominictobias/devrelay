@@ -11,6 +11,23 @@ A local development reverse proxy with automatic HTTPS using Cloudflare Pingora.
 
 ## Quick Start
 
+### Install
+
+**Via npm** (macOS and Linux):
+
+```bash
+npm install -g @devrelay/cli
+# or run without installing
+npx @devrelay/cli
+```
+
+**From source** (requires Rust 1.70+):
+
+```bash
+cargo build --release
+./target/release/devrelay
+```
+
 ### 1. Configure Your Routes
 
 Create a `config.yaml` file (or copy from `config.example.yaml`):
@@ -43,12 +60,15 @@ tls:
   ca_name: "DevRelay CA" # Name for the Certificate Authority
 ```
 
-### 2. Build and Run
+### 2. Run
+
+If you installed via npm, run:
 
 ```bash
-cargo build --release
-./target/release/devrelay
+devrelay
 ```
+
+If you built from source, run `./target/release/devrelay`.
 
 That's it! 🎉
 
@@ -71,7 +91,7 @@ Then just restart your browser and access `https://myapp.dev`!
 ### Custom Config Path
 
 ```bash
-./target/release/devrelay --config config.example.yaml
+devrelay --config config.example.yaml
 ```
 
 ### Skip Auto-Installation
@@ -79,7 +99,7 @@ Then just restart your browser and access `https://myapp.dev`!
 If you want to install manually:
 
 ```bash
-./target/release/devrelay --skip-install
+devrelay --skip-install
 ```
 
 ### Force Reinstallation
@@ -87,7 +107,7 @@ If you want to install manually:
 To force reinstall the CA cert and hosts entries:
 
 ```bash
-./target/release/devrelay --force-install
+devrelay --force-install
 ```
 
 ### Uninstall
@@ -95,7 +115,7 @@ To force reinstall the CA cert and hosts entries:
 To remove the CA certificate from your macOS Keychain and clean up `/etc/hosts` entries:
 
 ```bash
-./target/release/devrelay --uninstall
+devrelay --uninstall
 ```
 
 ## How It Works
