@@ -3,7 +3,6 @@ name: Publish NPM
 on:
   release:
     types: [published]
-  # Temp: remove after successful 0.1.0 run
   workflow_dispatch:
     inputs:
       version:
@@ -69,11 +68,22 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
 
       # Manual run (workflow_dispatch): use input version. Release: use tag (strip refs/tags/ and leading v).
       # Manual trigger is for re-publishing (e.g. 0.1.0) or running without a new release.
@@ -95,8 +105,6 @@ jobs:
           path: artifacts
 
       - name: Publish platform packages
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
             plat="${platform%-*}";
@@ -122,5 +130,3 @@ jobs:
       - name: Publish @devrelay/cli
         run: npm publish --access public
         working-directory: npm/cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
