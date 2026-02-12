@@ -8,7 +8,6 @@ on:
       version:
         description: 'Version to publish (e.g. 0.1.0)'
         required: true
-        default: '0.1.0'
 
 jobs:
   build:
@@ -90,8 +89,6 @@ jobs:
             echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
           fi
 
-      # Manual run (workflow_dispatch): use input version. Release: use tag (strip refs/tags/ and leading v).
-      # Manual trigger is for re-publishing (e.g. 0.1.0) or running without a new release.
       - name: Set version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then

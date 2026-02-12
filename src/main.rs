@@ -17,7 +17,7 @@ use std::sync::Arc;
 #[command(about = "Local development reverse proxy with automatic HTTPS", long_about = None)]
 enum Command {
     /// Start the proxy server (default)
-    #[command(name = "server")]
+    #[command(name = "start")]
     Server {
         /// Path to configuration file
         #[arg(short, long, default_value = "config.yaml")]
@@ -58,28 +58,18 @@ fn run_server(
     force_install: bool,
     uninstall: bool,
 ) -> Result<()> {
-    // Resolve config path - if relative, look next to executable first
+    // Resolve config path - prefer current working directory (project root) for bare filenames
     let config_path = if config_arg.is_absolute() {
         config_arg
     } else if config_arg.starts_with(".") || config_arg.starts_with("..") {
         // Explicitly relative path (./foo or ../foo) - resolve from CWD
         config_arg
     } else {
-        // Bare filename - try next to executable first
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
-
-        if let Some(exe_dir) = exe_dir {
-            let exe_config = exe_dir.join(&config_arg);
-            if exe_config.exists() {
-                exe_config
-            } else {
-                config_arg
-            }
-        } else {
-            config_arg
-        }
+        // Bare filename (e.g. config.yaml) - resolve from CWD so it works when run
+        // from project root via npm/bun (bun run proxy server)
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&config_arg))
+            .unwrap_or(config_arg)
     };
 
     println!("DevRelay - Local Development Proxy");
@@ -188,6 +178,22 @@ fn run_server(
 
     // Add listeners for all configured ports (TLS or TCP)
     let listen_addrs = get_listen_addresses(&config_arc);
+
+    // Pre-check that ports are not already in use (Pingora would panic on bind otherwise)
+    for listen_addr in &listen_addrs {
+        if let Err(e) = std::net::TcpListener::bind(&listen_addr.addr) {
+            if e.kind() == std::io::ErrorKind::AddrInUse {
+                let port = listen_addr.addr.rsplit(':').next().unwrap_or("?");
+                anyhow::bail!(
+                    "Port already in use: {}. Stop the process using it or use a different port in your config (e.g. config.yaml).\n\n  To find and stop the process:\n    1. lsof -i :{}\n    2. kill <PID>   (use the PID from the output, e.g. kill 650)",
+                    listen_addr.addr,
+                    port
+                );
+            }
+            return Err(e).context(format!("Cannot bind to {}", listen_addr.addr));
+        }
+    }
+
     for listen_addr in &listen_addrs {
         if listen_addr.tls {
             if let Some((ref cert_path, ref key_path)) = tls_cert_key {
@@ -212,5 +218,6 @@ fn run_server(
     server.add_service(proxy_service);
 
     println!("Starting DevRelay proxy...\n");
+    // Shutdown: Ctrl+C (SIGINT) = fast exit; kill <PID> or SIGTERM = graceful shutdown.
     server.run_forever();
 }
