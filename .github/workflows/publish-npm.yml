@@ -89,7 +89,7 @@ jobs:
             plat="${platform%-*}";
             arch="${platform#*-}";
             mkdir -p "pkg/$platform/bin";
-            sed -e "s/{{platform}}/$plat/g" -e "s/{{arch}}/$arch/g" -e "s|{{version}}|$VERSION|g" npm/package.json.tmpl > "pkg/$platform/package.json";
+            sed -e "s/{{platform}}/$plat/g" -e "s/{{arch}}/$arch/g" -e "s#{{version}}#$VERSION#g" npm/package.json.tmpl > "pkg/$platform/package.json";
             cp "artifacts/$platform/devrelay" "pkg/$platform/bin/devrelay";
             chmod +x "pkg/$platform/bin/devrelay";
             (cd "pkg/$platform" && npm publish --access public);
