@@ -40,18 +40,7 @@ routes:
     listen_tls: true # Required for .dev domains in Chrome
     backend: "localhost"
     backend_port: 3000 # Port where your dev server runs
-
-  - host: "myapi.com"
-    port: 8080
-    backend: "localhost"
-    backend_port: 5000
-
-  - host: "myfrontend.com"
-    port: 443
-    listen_tls: true # Accept HTTPS connections (default: false)
-    backend: "localhost"
-    backend_port: 6000
-    backend_tls: true # Connect to backend over HTTPS (default: false)
+    backend_tls: false # true for https://localhost (default = false)
 
 # TLS/SSL Configuration
 tls:

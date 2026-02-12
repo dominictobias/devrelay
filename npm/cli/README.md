@@ -42,6 +42,7 @@ routes:
     listen_tls: true
     backend: "localhost"
     backend_port: 3000
+    backend_tls: false # true for https://localhost (default = false)
 
 tls:
   enabled: true
