@@ -69,10 +69,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
+      # Optional: set NPM_TOKEN for first publish only (creates packages). Remove after adding Trusted Publishers.
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     permissions:
       contents: read
-      id-token: write
+      id-token: write   # Required for npm Trusted Publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
 
@@ -82,8 +83,12 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup npm auth
-        run: echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+      # Only write token when set (first publish). Once Trusted Publishers are configured, remove NPM_TOKEN.
+      - name: Setup npm auth (optional)
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          fi
 
       # Manual run (workflow_dispatch): use input version. Release: use tag (strip refs/tags/ and leading v).
       # Manual trigger is for re-publishing (e.g. 0.1.0) or running without a new release.

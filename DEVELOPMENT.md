@@ -5,7 +5,20 @@
 - **Rust** 1.70+ (for building the binary)
 - **Node.js** 14+ (for the npm wrapper and version script)
 - Access to the **@devrelay** npm org (to publish packages)
-- **NPM_TOKEN** added as a GitHub repository secret (CI uses it to publish)
+- **npm publish** from CI uses **Trusted Publishing** (OIDC) once configured. See **First-time npm setup** below.
+
+### First-time npm setup
+
+npm does not let you create packages in the UI—the first publish creates them. Do this once:
+
+1. **First publish (creates the 5 packages)**  
+   Create a granular access token on [npm → Access Tokens](https://www.npmjs.com/) with **“Bypass two-factor authentication”** checked and **Read and write** for the scope/packages you need. Add it as the **NPM_TOKEN** repo secret. Run the **Publish NPM** workflow once (e.g. via a release or workflow_dispatch). That publish creates `@devrelay/darwin-arm64`, `@devrelay/darwin-x64`, `@devrelay/linux-x64`, `@devrelay/linux-arm64`, and `@devrelay/cli` on npm.
+
+2. **Switch to Trusted Publishing**  
+   On npm, for **each** of those five packages, open Package → **Settings** → **Trusted Publisher** → **GitHub Actions**, and set your org/user, repository name, and workflow filename **`publish-npm.yml`**. Save.
+
+3. **Drop the token**  
+   Remove the **NPM_TOKEN** secret from the repo. Future runs use OIDC only (no token, no “Bypass 2FA” needed).
 
 ## Building locally
 
