@@ -28,8 +28,10 @@ impl CertManager {
             println!("Generating new Certificate Authority...");
             self.generate_ca()?;
             println!("✓ CA certificate generated at: {}", self.ca_cert_path().display());
-            println!("\nTo trust this CA on macOS, run:");
-            println!("  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain {}", self.ca_cert_path().display());
+            println!("\nTo trust this CA manually:");
+            println!("  macOS: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain {}", self.ca_cert_path().display());
+            println!("  Linux (Debian/Ubuntu): sudo cp {} /usr/local/share/ca-certificates/devrelay-ca.crt && sudo update-ca-certificates", self.ca_cert_path().display());
+            println!("  Linux (RHEL/Fedora):   sudo cp {} /etc/pki/ca-trust/source/anchors/devrelay-ca.crt && sudo update-ca-trust", self.ca_cert_path().display());
         }
 
         Ok(())

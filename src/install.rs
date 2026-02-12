@@ -3,6 +3,9 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+/// CA cert filename we install into the system store on Linux (so we can uninstall reliably).
+const LINUX_CA_FILENAME: &str = "devrelay-ca.crt";
+
 fn run_with_sudo(shell_command: &str) -> Result<String> {
     let output = Command::new("sudo")
         .args(["sh", "-c", shell_command])
@@ -20,15 +23,34 @@ fn run_with_sudo(shell_command: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn is_macos() -> bool {
+    std::env::consts::OS == "macos"
+}
+
 pub struct Installer;
 
 impl Installer {
-    /// Install CA certificate to macOS System Keychain
+    /// Install CA certificate to system trust store (macOS Keychain or Linux CA store).
     pub fn install_ca_cert(cert_path: &Path) -> Result<bool> {
         if !cert_path.exists() {
             return Ok(false);
         }
+        if is_macos() {
+            Self::install_ca_cert_macos(cert_path)
+        } else if std::env::consts::OS == "linux" {
+            Self::install_ca_cert_linux(cert_path)
+        } else {
+            println!("⚠️  CA certificate auto-install is not supported on this OS.");
+            println!(
+                "   Add the CA cert to your system trust store manually: {}",
+                cert_path.display()
+            );
+            Ok(false)
+        }
+    }
 
+    /// Install CA certificate to macOS System Keychain.
+    fn install_ca_cert_macos(cert_path: &Path) -> Result<bool> {
         println!("🔐 Installing CA certificate to macOS Keychain...");
         println!("   Waiting for authentication...");
 
@@ -45,7 +67,6 @@ impl Installer {
             }
             Err(e) => {
                 let error_msg = e.to_string();
-                // Check if cert is already installed
                 if error_msg.contains("The specified item already exists in the keychain") {
                     println!("✅ CA certificate already installed");
                     Ok(true)
@@ -60,7 +81,43 @@ impl Installer {
         }
     }
 
-    /// Add domain entries to /etc/hosts
+    /// Install CA certificate to Linux system trust store (Debian/Ubuntu or RHEL/Fedora).
+    fn install_ca_cert_linux(cert_path: &Path) -> Result<bool> {
+        let cert_path_str = cert_path
+            .canonicalize()
+            .context("Failed to resolve CA path")?
+            .to_str()
+            .context("Invalid cert path")?
+            .replace("'", "'\\''");
+
+        // Prefer Debian/Ubuntu path; fallback to RHEL/Fedora.
+        let (dest_dir, update_cmd) = if Path::new("/usr/local/share/ca-certificates").exists() {
+            ("/usr/local/share/ca-certificates", "update-ca-certificates")
+        } else if Path::new("/etc/pki/ca-trust/source/anchors").exists() {
+            ("/etc/pki/ca-trust/source/anchors", "update-ca-trust")
+        } else {
+            eprintln!(
+                "❌ No supported CA store found. Install ca-certificates (Debian/Ubuntu) or ca-certificates (RHEL/Fedora)."
+            );
+            return Ok(false);
+        };
+
+        let dest_str = format!("{}/{}", dest_dir, LINUX_CA_FILENAME);
+
+        println!("🔐 Installing CA certificate to system trust store...");
+        println!("   Target: {}", dest_str);
+        println!("   Waiting for authentication...");
+
+        let copy_cmd = format!("cp '{}' '{}'", cert_path_str, dest_str);
+        run_with_sudo(&copy_cmd).context("Failed to copy CA certificate")?;
+
+        run_with_sudo(update_cmd).context("Failed to update CA store")?;
+
+        println!("✅ CA certificate installed successfully!");
+        Ok(true)
+    }
+
+    /// Add domain entries to /etc/hosts (macOS and Linux).
     pub fn install_hosts_entries(domains: &[String]) -> Result<bool> {
         if domains.is_empty() {
             return Ok(true);
@@ -142,11 +199,22 @@ impl Installer {
         false
     }
 
-    /// Remove CA certificate from macOS System Keychain
+    /// Remove CA certificate from system trust store (macOS Keychain or Linux).
     pub fn uninstall_ca_cert(ca_name: &str) -> Result<bool> {
+        if is_macos() {
+            Self::uninstall_ca_cert_macos(ca_name)
+        } else if std::env::consts::OS == "linux" {
+            Self::uninstall_ca_cert_linux()
+        } else {
+            println!("⚠️  CA certificate uninstall is not supported on this OS.");
+            Ok(false)
+        }
+    }
+
+    /// Remove CA certificate from macOS System Keychain.
+    fn uninstall_ca_cert_macos(ca_name: &str) -> Result<bool> {
         println!("🔐 Removing CA certificate from macOS Keychain...");
 
-        // Find the certificate hash in the System Keychain
         let find_output = Command::new("security")
             .arg("find-certificate")
             .arg("-a")
@@ -162,7 +230,6 @@ impl Installer {
             return Ok(true);
         }
 
-        // Extract SHA-1 hashes from output
         let stdout = String::from_utf8_lossy(&find_output.stdout);
         let hashes: Vec<&str> = stdout
             .lines()
@@ -204,7 +271,40 @@ impl Installer {
         Ok(success)
     }
 
-    /// Remove DevRelay domain entries from /etc/hosts
+    /// Remove CA certificate from Linux system trust store.
+    fn uninstall_ca_cert_linux() -> Result<bool> {
+        println!("🔐 Removing CA certificate from system trust store...");
+
+        let anchors = [
+            "/usr/local/share/ca-certificates",
+            "/etc/pki/ca-trust/source/anchors",
+        ];
+        let mut removed = false;
+        for dir in &anchors {
+            let path = format!("{}/{}", dir, LINUX_CA_FILENAME);
+            if Path::new(&path).exists() {
+                println!("   Waiting for authentication...");
+                let cmd = format!("rm -f '{}'", path.replace("'", "'\\''"));
+                run_with_sudo(&cmd).context("Failed to remove CA certificate")?;
+                removed = true;
+            }
+        }
+
+        if Path::new("/usr/local/share/ca-certificates").exists() {
+            let _ = run_with_sudo("update-ca-certificates");
+        } else if Path::new("/etc/pki/ca-trust/source/anchors").exists() {
+            let _ = run_with_sudo("update-ca-trust");
+        }
+
+        if removed {
+            println!("✅ CA certificate removed from system trust store");
+        } else {
+            println!("✅ CA certificate not found in trust store (already removed)");
+        }
+        Ok(true)
+    }
+
+    /// Remove DevRelay domain entries from /etc/hosts (macOS and Linux).
     pub fn uninstall_hosts_entries(domains: &[String]) -> Result<bool> {
         if domains.is_empty() {
             return Ok(true);
@@ -315,13 +415,22 @@ impl Installer {
         Ok(())
     }
 
-    /// Check if CA certificate is installed in System Keychain
+    /// Check if CA certificate is installed in system trust store.
     pub fn is_ca_installed(cert_path: &Path) -> Result<bool> {
         if !cert_path.exists() {
             return Ok(false);
         }
+        if is_macos() {
+            Self::is_ca_installed_macos()
+        } else if std::env::consts::OS == "linux" {
+            Self::is_ca_installed_linux()
+        } else {
+            Ok(false)
+        }
+    }
 
-        // Try to find the cert in the keychain by checking the subject
+    /// Check if CA certificate is installed in macOS System Keychain.
+    fn is_ca_installed_macos() -> Result<bool> {
         let output = Command::new("security")
             .arg("find-certificate")
             .arg("-a")
@@ -332,6 +441,20 @@ impl Installer {
             .context("Failed to check keychain")?;
 
         Ok(output.status.success() && !output.stdout.is_empty())
+    }
+
+    /// Check if our CA certificate is installed in Linux trust store.
+    fn is_ca_installed_linux() -> Result<bool> {
+        let anchors = [
+            "/usr/local/share/ca-certificates",
+            "/etc/pki/ca-trust/source/anchors",
+        ];
+        for dir in &anchors {
+            if Path::new(&format!("{}/{}", dir, LINUX_CA_FILENAME)).exists() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Run the full installation process

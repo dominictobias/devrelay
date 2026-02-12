@@ -75,7 +75,7 @@ That's it! 🎉
 On first run, DevRelay will **automatically**:
 
 - ✅ Generate CA and server certificates
-- ✅ Install the CA certificate to your macOS System Keychain (prompts for password)
+- ✅ Install the CA certificate to your system trust store (macOS Keychain or Linux `ca-certificates`; prompts for password)
 - ✅ Add your custom domains to `/etc/hosts` (prompts for password)
 
 Then just restart your browser and access `https://myapp.dev`!
@@ -112,7 +112,7 @@ devrelay --force-install
 
 ### Uninstall
 
-To remove the CA certificate from your macOS Keychain and clean up `/etc/hosts` entries:
+To remove the CA certificate from your system trust store and clean up `/etc/hosts` entries:
 
 ```bash
 devrelay --uninstall
@@ -128,7 +128,7 @@ devrelay --uninstall
 ## Requirements
 
 - Rust 1.70+
-- macOS (for certificate installation commands; Linux support coming soon)
+- **macOS** or **Linux** (for automatic CA cert and `/etc/hosts` setup). On Linux, Debian/Ubuntu (`ca-certificates`) or RHEL/Fedora (`ca-certificates`) must be installed.
 
 ## License
 
