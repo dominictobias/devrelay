@@ -3,61 +3,74 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+fn run_with_sudo(shell_command: &str) -> Result<String> {
+    let output = Command::new("sudo")
+        .args(["sh", "-c", shell_command])
+        .output()
+        .context("Failed to execute sudo command")?;
+
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        if error.is_empty() {
+            return Err(anyhow::anyhow!("Command execution failed"));
+        }
+        return Err(anyhow::anyhow!("Command failed: {}", error.trim()));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 pub struct Installer;
 
 impl Installer {
     /// Install CA certificate to macOS System Keychain
-    /// This will prompt the user for their password via sudo
     pub fn install_ca_cert(cert_path: &Path) -> Result<bool> {
         if !cert_path.exists() {
             return Ok(false);
         }
 
         println!("🔐 Installing CA certificate to macOS Keychain...");
-        println!("   This requires administrator privileges.");
+        println!("   Waiting for authentication...");
 
-        let output = Command::new("sudo")
-            .arg("security")
-            .arg("add-trusted-cert")
-            .arg("-d")
-            .arg("-r")
-            .arg("trustRoot")
-            .arg("-k")
-            .arg("/Library/Keychains/System.keychain")
-            .arg(cert_path)
-            .output()
-            .context("Failed to execute security command")?;
+        let cert_path_str = cert_path.to_str().context("Invalid cert path")?;
+        let command = format!(
+            "security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '{}'",
+            cert_path_str.replace("'", "'\\''")
+        );
 
-        if output.status.success() {
-            println!("✅ CA certificate installed successfully!");
-            Ok(true)
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-
-            // Check if cert is already installed
-            if stderr.contains("The specified item already exists in the keychain") {
-                println!("✅ CA certificate already installed");
+        match run_with_sudo(&command) {
+            Ok(_) => {
+                println!("✅ CA certificate installed successfully!");
                 Ok(true)
-            } else {
-                eprintln!("❌ Failed to install CA certificate: {}", stderr);
-                Ok(false)
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                // Check if cert is already installed
+                if error_msg.contains("The specified item already exists in the keychain") {
+                    println!("✅ CA certificate already installed");
+                    Ok(true)
+                } else if error_msg.contains("user cancelled") {
+                    println!("⚠️  Installation cancelled by user");
+                    Ok(false)
+                } else {
+                    eprintln!("❌ Failed to install CA certificate: {}", error_msg);
+                    Ok(false)
+                }
             }
         }
     }
 
     /// Add domain entries to /etc/hosts
-    /// This will prompt the user for their password via sudo
     pub fn install_hosts_entries(domains: &[String]) -> Result<bool> {
         if domains.is_empty() {
             return Ok(true);
         }
 
         println!("\n🌐 Updating /etc/hosts with domain entries...");
-        println!("   This requires administrator privileges.");
 
         // Read current /etc/hosts
-        let hosts_content = fs::read_to_string("/etc/hosts")
-            .context("Failed to read /etc/hosts")?;
+        let hosts_content =
+            fs::read_to_string("/etc/hosts").context("Failed to read /etc/hosts")?;
 
         // Check which domains are missing
         let mut missing_domains = Vec::new();
@@ -78,24 +91,32 @@ impl Installer {
             new_entries.push_str(&format!("127.0.0.1 {}\n", domain));
         }
 
-        // Append to /etc/hosts using sudo
-        let output = Command::new("sudo")
-            .arg("sh")
-            .arg("-c")
-            .arg(format!("echo '{}' >> /etc/hosts", new_entries.trim()))
-            .output()
-            .context("Failed to update /etc/hosts")?;
+        println!("   Waiting for authentication...");
 
-        if output.status.success() {
-            println!("✅ Added {} domain(s) to /etc/hosts:", missing_domains.len());
-            for domain in &missing_domains {
-                println!("   • {}", domain);
+        let entries_str = new_entries.replace("'", "'\\''");
+        let command = format!("echo '{}' >> /etc/hosts", entries_str.trim());
+
+        match run_with_sudo(&command) {
+            Ok(_) => {
+                println!(
+                    "✅ Added {} domain(s) to /etc/hosts:",
+                    missing_domains.len()
+                );
+                for domain in &missing_domains {
+                    println!("   • {}", domain);
+                }
+                Ok(true)
             }
-            Ok(true)
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("❌ Failed to update /etc/hosts: {}", stderr);
-            Ok(false)
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("user cancelled") {
+                    println!("⚠️  Installation cancelled by user");
+                    Ok(false)
+                } else {
+                    eprintln!("❌ Failed to update /etc/hosts: {}", error_msg);
+                    Ok(false)
+                }
+            }
         }
     }
 
@@ -122,10 +143,8 @@ impl Installer {
     }
 
     /// Remove CA certificate from macOS System Keychain
-    /// This will prompt the user for their password via sudo
     pub fn uninstall_ca_cert(ca_name: &str) -> Result<bool> {
         println!("🔐 Removing CA certificate from macOS Keychain...");
-        println!("   This requires administrator privileges.");
 
         // Find the certificate hash in the System Keychain
         let find_output = Command::new("security")
@@ -156,20 +175,25 @@ impl Installer {
             return Ok(true);
         }
 
+        println!("   Waiting for authentication...");
+
         let mut success = true;
         for hash in &hashes {
-            let output = Command::new("sudo")
-                .arg("security")
-                .arg("delete-certificate")
-                .arg("-Z")
-                .arg(hash)
-                .arg("/Library/Keychains/System.keychain")
-                .output()
-                .context("Failed to execute security command")?;
+            let command = format!(
+                "security delete-certificate -Z {} /Library/Keychains/System.keychain",
+                hash
+            );
 
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                eprintln!("❌ Failed to remove certificate (hash {}): {}", hash, stderr);
+            if let Err(e) = run_with_sudo(&command) {
+                let error_msg = e.to_string();
+                if error_msg.contains("user cancelled") {
+                    println!("⚠️  Uninstallation cancelled by user");
+                    return Ok(false);
+                }
+                eprintln!(
+                    "❌ Failed to remove certificate (hash {}): {}",
+                    hash, error_msg
+                );
                 success = false;
             }
         }
@@ -181,17 +205,15 @@ impl Installer {
     }
 
     /// Remove DevRelay domain entries from /etc/hosts
-    /// This will prompt the user for their password via sudo
     pub fn uninstall_hosts_entries(domains: &[String]) -> Result<bool> {
         if domains.is_empty() {
             return Ok(true);
         }
 
         println!("\n🌐 Removing DevRelay entries from /etc/hosts...");
-        println!("   This requires administrator privileges.");
 
-        let hosts_content = fs::read_to_string("/etc/hosts")
-            .context("Failed to read /etc/hosts")?;
+        let hosts_content =
+            fs::read_to_string("/etc/hosts").context("Failed to read /etc/hosts")?;
 
         let mut removed = Vec::new();
         let mut in_devrelay_block = false;
@@ -209,7 +231,9 @@ impl Installer {
                 if in_devrelay_block {
                     if trimmed.starts_with("127.0.0.1") {
                         let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                        if parts.len() >= 2 && domains.iter().any(|d| parts[1..].contains(&d.as_str())) {
+                        if parts.len() >= 2
+                            && domains.iter().any(|d| parts[1..].contains(&d.as_str()))
+                        {
                             removed.push(parts[1..].join(" "));
                             return false;
                         }
@@ -231,34 +255,38 @@ impl Installer {
             return Ok(true);
         }
 
+        println!("   Waiting for authentication...");
+
         let new_content = filtered.join("\n") + "\n";
+        let content_escaped = new_content.replace("'", "'\\''").replace("\"", "\\\"");
 
-        // Write back using sudo
-        let mut child = Command::new("sudo")
-            .arg("tee")
-            .arg("/etc/hosts")
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .spawn()
-            .context("Failed to spawn sudo tee")?;
+        // Use printf instead of echo to better handle special characters
+        let command = format!(
+            "printf '%s' '{}' | tee /etc/hosts > /dev/null",
+            content_escaped
+        );
 
-        if let Some(mut stdin) = child.stdin.take() {
-            use std::io::Write;
-            stdin.write_all(new_content.as_bytes())
-                .context("Failed to write to /etc/hosts")?;
-        }
-
-        let status = child.wait().context("Failed to wait for sudo tee")?;
-
-        if status.success() {
-            println!("✅ Removed {} domain entry/entries from /etc/hosts:", removed.len());
-            for entry in &removed {
-                println!("   • {}", entry);
+        match run_with_sudo(&command) {
+            Ok(_) => {
+                println!(
+                    "✅ Removed {} domain entry/entries from /etc/hosts:",
+                    removed.len()
+                );
+                for entry in &removed {
+                    println!("   • {}", entry);
+                }
+                Ok(true)
             }
-            Ok(true)
-        } else {
-            eprintln!("❌ Failed to update /etc/hosts");
-            Ok(false)
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("user cancelled") {
+                    println!("⚠️  Uninstallation cancelled by user");
+                    Ok(false)
+                } else {
+                    eprintln!("❌ Failed to update /etc/hosts: {}", error_msg);
+                    Ok(false)
+                }
+            }
         }
     }
 

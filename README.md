@@ -17,21 +17,32 @@ A local development reverse proxy with automatic HTTPS using Cloudflare Pingora.
 Create a `config.yaml` file (or copy from `config.example.yaml`):
 
 ```yaml
+# Proxy routes - each route maps a custom domain to a backend
 routes:
   - host: "myapp.dev"
-    port: 443 # HTTPS port
+    port: 8080 # Port where proxy listens
+    listen_tls: true # Required for .dev domains in Chrome
     backend: "localhost"
     backend_port: 3000 # Port where your dev server runs
 
   - host: "api.dev"
-    port: 443
+    port: 443 # HTTPS on standard port
+    listen_tls: true # Accept HTTPS connections (default: false)
     backend: "localhost"
     backend_port: 5000
 
+  - host: "frontend.dev"
+    port: 443
+    listen_tls: true # Accept HTTPS connections (default: false)
+    backend: "localhost"
+    backend_port: 8080
+    backend_tls: false # Connect to backend over TLS (default: false)
+
+# TLS/SSL Configuration
 tls:
   enabled: true
-  cert_dir: "./certs"
-  ca_name: "DevRelay CA"
+  cert_dir: "./certs" # Directory to store generated certificates
+  ca_name: "DevRelay CA" # Name for the Certificate Authority
 ```
 
 ### 2. Build and Run
@@ -55,8 +66,8 @@ Then just restart your browser and access `https://myapp.dev`!
 
 ### Access Your Dev Servers
 
-- `http://myapp.dev:8080` → proxies to `localhost:3000`
-- `https://api.dev` → proxies to `localhost:5000`
+- `https://myapp.dev:8080` → proxies to `http://localhost:3000`
+- `https://api.dev` → proxies to `http://localhost:5000`
 
 ### Custom Config Path
 

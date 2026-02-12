@@ -1,3 +1,3 @@
 - Don't change the Rust edition from 2024
 - When adding crates add the latest version unless there is a specific reason not to (like compat)
-- Fetch latest documentation from online
+- Fetch latest documentation from source code or online. Some repos contain an examples/ folder with up-to-date examples

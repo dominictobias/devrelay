@@ -4,55 +4,81 @@ mod install;
 mod proxy;
 
 use anyhow::{Context, Result};
+use certs::CertManager;
 use clap::Parser;
 use config::Config;
 use install::Installer;
-use proxy::{get_listen_addresses, DevRelayProxy};
+use proxy::{DevRelayProxy, get_listen_addresses};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(name = "devrelay")]
 #[command(about = "Local development reverse proxy with automatic HTTPS", long_about = None)]
-struct Args {
-    /// Path to configuration file
-    #[arg(short, long, default_value = "config.yaml")]
-    config: PathBuf,
+enum Command {
+    /// Start the proxy server (default)
+    #[command(name = "server")]
+    Server {
+        /// Path to configuration file
+        #[arg(short, long, default_value = "config.yaml")]
+        config: PathBuf,
 
-    /// Skip automatic installation of CA cert and /etc/hosts entries
-    #[arg(long)]
-    skip_install: bool,
+        /// Skip automatic installation of CA cert and /etc/hosts entries
+        #[arg(long)]
+        skip_install: bool,
 
-    /// Force reinstallation even if already installed
-    #[arg(long)]
-    force_install: bool,
+        /// Force reinstallation even if already installed
+        #[arg(long)]
+        force_install: bool,
 
-    /// Uninstall CA certificate and /etc/hosts entries, then exit
-    #[arg(long)]
-    uninstall: bool,
+        /// Uninstall CA certificate and /etc/hosts entries, then exit
+        #[arg(long)]
+        uninstall: bool,
+    },
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let command = Command::parse();
 
+    match command {
+        Command::Server {
+            config,
+            skip_install,
+            force_install,
+            uninstall,
+        } => run_server(config, skip_install, force_install, uninstall)?,
+    }
+
+    Ok(())
+}
+
+fn run_server(
+    config_arg: PathBuf,
+    skip_install: bool,
+    force_install: bool,
+    uninstall: bool,
+) -> Result<()> {
     // Resolve config path - if relative, look next to executable first
-    let config_path = if args.config.is_absolute() {
-        args.config
+    let config_path = if config_arg.is_absolute() {
+        config_arg
+    } else if config_arg.starts_with(".") || config_arg.starts_with("..") {
+        // Explicitly relative path (./foo or ../foo) - resolve from CWD
+        config_arg
     } else {
-        // Try next to executable first
+        // Bare filename - try next to executable first
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()));
 
         if let Some(exe_dir) = exe_dir {
-            let exe_config = exe_dir.join(&args.config);
+            let exe_config = exe_dir.join(&config_arg);
             if exe_config.exists() {
                 exe_config
             } else {
-                args.config
+                config_arg
             }
         } else {
-            args.config
+            config_arg
         }
     };
 
@@ -61,13 +87,12 @@ fn main() -> Result<()> {
 
     // Load configuration
     println!("Loading config from: {}", config_path.display());
-    let config = Config::load(&config_path)
-        .with_context(|| "Failed to load configuration")?;
+    let config = Config::load(&config_path).with_context(|| "Failed to load configuration")?;
 
     println!("Loaded {} route(s)\n", config.routes.len());
 
     // Handle uninstall
-    if args.uninstall {
+    if uninstall {
         let domains: Vec<String> = config.routes.iter().map(|r| r.host.clone()).collect();
         Installer::run_uninstall(&config.tls.ca_name, &domains)?;
         return Ok(());
@@ -77,7 +102,7 @@ fn main() -> Result<()> {
     let mut tls_cert_key: Option<(String, String)> = None;
 
     if config.tls.enabled {
-        let cert_manager = certs::CertManager::new(&config.tls.cert_dir, config.tls.ca_name.clone());
+        let cert_manager = CertManager::new(&config.tls.cert_dir, config.tls.ca_name.clone());
         cert_manager.init()?;
 
         // Generate server certificates for all configured hosts
@@ -86,7 +111,8 @@ fn main() -> Result<()> {
         }
 
         // Generate combined cert for TLS listeners (covers all listen_tls domains)
-        let tls_domains: Vec<String> = config.routes
+        let tls_domains: Vec<String> = config
+            .routes
             .iter()
             .filter(|r| r.listen_tls)
             .map(|r| r.host.clone())
@@ -95,20 +121,25 @@ fn main() -> Result<()> {
         if !tls_domains.is_empty() {
             cert_manager.generate_combined_server_cert(&tls_domains)?;
             tls_cert_key = Some((
-                cert_manager.combined_cert_path().to_string_lossy().into_owned(),
-                cert_manager.combined_key_path().to_string_lossy().into_owned(),
+                cert_manager
+                    .combined_cert_path()
+                    .to_string_lossy()
+                    .into_owned(),
+                cert_manager
+                    .combined_key_path()
+                    .to_string_lossy()
+                    .into_owned(),
             ));
         }
 
         println!();
 
         // Auto-install CA cert and /etc/hosts entries if needed
-        if !args.skip_install {
+        if !skip_install {
             let ca_cert_path = cert_manager.ca_cert_path();
             let domains: Vec<String> = config.routes.iter().map(|r| r.host.clone()).collect();
 
-            let needs_install = args.force_install
-                || !Installer::is_ca_installed(&ca_cert_path)?;
+            let needs_install = force_install || !Installer::is_ca_installed(&ca_cert_path)?;
 
             if needs_install {
                 Installer::run_install(&ca_cert_path, &domains)?;
@@ -136,24 +167,24 @@ fn main() -> Result<()> {
         };
         println!(
             "  {}://{}{} -> {}://{}:{}",
-            listen_proto, route.host, listen_port_str,
-            backend_proto, route.backend, route.backend_port
+            listen_proto,
+            route.host,
+            listen_port_str,
+            backend_proto,
+            route.backend,
+            route.backend_port
         );
     }
     println!();
 
     // Build Pingora server
-    let mut server = pingora_core::server::Server::new(None)
-        .context("Failed to create server")?;
+    let mut server = pingora_core::server::Server::new(None).context("Failed to create server")?;
     server.bootstrap();
 
     let config_arc = Arc::new(config);
     let proxy = DevRelayProxy::new(config_arc.clone());
 
-    let mut proxy_service = pingora_proxy::http_proxy_service(
-        &server.configuration,
-        proxy,
-    );
+    let mut proxy_service = pingora_proxy::http_proxy_service(&server.configuration, proxy);
 
     // Add listeners for all configured ports (TLS or TCP)
     let listen_addrs = get_listen_addresses(&config_arc);
@@ -162,7 +193,10 @@ fn main() -> Result<()> {
             if let Some((ref cert_path, ref key_path)) = tls_cert_key {
                 proxy_service
                     .add_tls(&listen_addr.addr, cert_path, key_path)
-                    .context(format!("Failed to add TLS listener on {}", listen_addr.addr))?;
+                    .context(format!(
+                        "Failed to add TLS listener on {}",
+                        listen_addr.addr
+                    ))?;
             } else {
                 eprintln!(
                     "Warning: route on {} has listen_tls but TLS is not enabled in config, falling back to TCP",
