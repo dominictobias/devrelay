@@ -3,6 +3,13 @@ name: Publish NPM
 on:
   release:
     types: [published]
+  # Temp: remove after successful 0.1.0 run
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 0.1.0)'
+        required: true
+        default: '0.1.0'
 
 jobs:
   build:
@@ -68,10 +75,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Manual run (workflow_dispatch): use input version. Release: use tag (strip refs/tags/ and leading v).
+      # Manual trigger is for re-publishing (e.g. 0.1.0) or running without a new release.
       - name: Set version
         run: |
-          VERSION="${GITHUB_REF#refs/tags/}";
-          VERSION="${VERSION#v}";
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}";
+          else
+            VERSION="${GITHUB_REF#refs/tags/}";
+            VERSION="${VERSION#v}";
+          fi;
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Download artifacts
