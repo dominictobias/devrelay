@@ -1,6 +1,13 @@
 # DevRelay
 
-Blazing fast Rust based reverse proxy powered by Cloudflare's [Pingora](https://github.com/cloudflare/pingora/) with automatic HTTPS for local development.
+A local development reverse proxy with automatic HTTPS using Cloudflare Pingora.
+
+## Features
+
+- 🔀 Route custom domains to local development servers
+- 🔒 Automatic HTTPS with self-signed certificates
+- ⚡ Built on Cloudflare's high-performance [Pingora](https://github.com/cloudflare/pingora) framework
+- 📝 Simple YAML configuration
 
 ## Install
 
