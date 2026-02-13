@@ -56,7 +56,7 @@ tls:
 devrelay start
 ```
 
-On first run, DevRelay will automatically generate certificates, install its CA to your system trust store, and add your domains to `/etc/hosts`. Restart your browser and visit `https://myapp.dev:8080`.
+On first run, DevRelay will automatically generate certificates, install its CA to your system trust store, and add your domains to `/etc/hosts`. Restart your browser and visit `https://myapp.dev`. If you had a server running on `http://localhost:3000` it will be loaded.
 
 ## Usage
 

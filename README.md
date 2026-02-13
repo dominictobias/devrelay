@@ -71,12 +71,6 @@ Then just restart your browser and access `https://myapp.dev`!
 
 ## Usage
 
-### Access Your Dev Servers
-
-- `https://myapp.dev:8080` → proxies to `http://localhost:3000`
-- `http://myapi.com` → proxies to `http://localhost:5000`
-- `https://myfrontend.com` → proxies to `https://localhost:6000`
-
 ### Custom Config Path
 
 ```bash
