@@ -38,7 +38,7 @@ Create a `config.yaml` in your project:
 ```yaml
 routes:
   - host: "myapp.dev"
-    port: 8080
+    port: 443
     listen_tls: true
     backend: "localhost"
     backend_port: 3000
